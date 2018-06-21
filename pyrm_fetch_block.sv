@@ -1,7 +1,8 @@
-
 //Author: Sloan Liu
 //RISC V Fetch Block
 //6/1/2018
+
+`include "rv64.vh"
 
 module pyrm_fetch_block(
 	reset_pyri,
@@ -47,8 +48,9 @@ module pyrm_fetch_block(
 
   assign all_retry = inst_retry_pyri | pc_retry_pyri;
   assign pc_pyro = (internal_pc & {64{~branch_pc_valid_pyri}}) | (branch_pc_pyri & {64{branch_pc_valid_pyri}});
+  assign branch_pc_retry_pyro = 0;
 
-  fetch_block_icache fetch_block_icache_inst(.clk(clk), .internal_pc(pc_pyro), .inst_out(inst_out));
+  fetch_block_icache fetch_block_icache_inst(.clk(clk), .internal_pc(pc_pyro[13:2]), .inst_out(inst_out));
 
   always_comb begin
     if(state == 2'b01) begin //RUNNING/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
@@ -57,7 +59,7 @@ module pyrm_fetch_block(
       inst_pyro = inst_out; //inst is saved
       op = inst_out[6:0];
 
-      if(op == 7'b1100011 || op == 7'b1100111) begin //If op is BRANCH or JALR
+      if(op == `OP_BRANCH || op == `OP_JALR) begin //If op is BRANCH or JALR
         internal_pc_next = internal_pc; //pc stagnant-> wait for state switch
 
         if(all_retry) begin //If inst_retry is high -> stops state machine
@@ -66,7 +68,7 @@ module pyrm_fetch_block(
           state_next = 2'b10; //*******STATE TRANSITION*********
         end
 
-      end else if(op == 7'b1101111) begin //If op is JAL
+      end else if(op == `OP_JAL) begin //If op is JAL
 
         if(all_retry) begin //If inst_retry is high -> pc goes nowhere
           internal_pc_next = internal_pc; //internal_pc stagnant
@@ -100,19 +102,17 @@ module pyrm_fetch_block(
 
       op = inst_out[6:0];
 
-      if(op == 7'b1100011 || op == 7'b1100111) begin //If = JALR/BRANCH
+      if(op == `OP_BRANCH || op == `OP_JALR) begin //If = JALR/BRANCH
 
         if(branch_pc_valid_pyri) begin //Branch_pc is ready with op = JALR/BRANCH
           internal_pc_next = branch_pc_pyri; //Branch_pc is saved to internal_pc (pretend)
           state_next = 2'b10; //Not done branching, stay at BRANCH --> will override top one!!!!!!
         end
 
-      end else if(op == 7'b1101111) begin //If op = JAL, and we're in BRANCH, JAL with branch_pc, casue branch_pc is our "internal_pc" but not yet
+      end else if(op == `OP_JAL) begin //If op = JAL, and we're in BRANCH, JAL with branch_pc, casue branch_pc is our "internal_pc" but not yet
         internal_pc_next = $signed(branch_pc_pyri) + {{43{inst_out[31]}}, {inst_out[31],inst_out[19:12],inst_out[20],inst_out[30:21],1'b0}};
-        //internal_pc_next = $signed(internal_pc) + {{43{inst_out[31]}}, {inst_out[31],inst_out[19:12],inst_out[20],inst_out[30:21],1'b0}};
       end else begin
         internal_pc_next = branch_pc_pyri + 4; //otherwise "interal_pc" (branch_pc) move on
-        //internal_pc_next = internal_pc + 4; //otherwise "interal_pc" (branch_pc) move on
       end
 
     end else begin //if not in any STATE

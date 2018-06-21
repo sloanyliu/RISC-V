@@ -82,8 +82,8 @@ input logic  raddr_retry_pyri;
 output logic [64-1:0] branch_pc_pyro; //branch_pc_o_next
 output logic  branch_pc_valid_pyro; //branch_pc_o_valid_next
 input logic  branch_pc_retry_pyri;
-
-input logic  clk;
+/*verilator lint_off UNUSED */
+input logic  clk /* lint_on */;
 ///////////////////////////////////////////////////////////////////
  logic [64-1:0] pc_i;
  logic          pc_i_valid;
@@ -143,13 +143,18 @@ input logic  clk;
  logic all_retry;
  assign all_retry = pc_retry_pyri | inst_retry_pyri | rdata_retry_pyri | raddr_retry_pyri | branch_pc_retry_pyri;
 
+ assign pc_retry_pyro = 0;
+ assign inst_retry_pyro = 0;
+ assign in1_retry_pyro = 0;
+ assign in2_retry_pyro = 0;
+
  logic [7-1:0] op; //operations
  logic [3-1:0] f3; //funct3
  logic [7-1:0] f7; //funct7
  logic [11:0] arith_imm; //immediate value for 32-bit ADDI, SLTI, SLTIU, 
                         //ANDI, ORI, XORI, 
                         //and offset for Loads
- logic [4:0] dest_logic; //destination register for operations
+ logic [4:0] dest_reg; //destination register for operations
  logic [11:0] store_offset; //offset for the store address
  logic [11:0] load_offset; //offset for the load address
  logic [19:0] upper_imm; //used for LUI
@@ -164,7 +169,7 @@ input logic  clk;
  assign f3 = inst_i[14:12];
  assign f7 = inst_i[31:25];
  assign arith_imm = inst_i[31:20];
- assign dest_logic = inst_i[11:7];
+ assign dest_reg = inst_i[11:7];
  assign store_offset = {inst_i[31:25],inst_i[11:7]}; 
  assign load_offset = inst_i[31:20];
  assign upper_imm = inst_i[31:12];
@@ -187,8 +192,8 @@ input logic  clk;
 
  always_comb begin
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-    if(op == `OP_ARITH && all_valid) begin 
-      if(f3 == `FUNCT3_ARITH_ADD) begin //000
+    if(op == `OP_ARITH && all_valid && in1_i_valid && in2_i_valid) begin
+      if(f3 == `FUNCT3_ARITH_ADD) begin
         if(f7 == `FUNCT7_ARITH_ADD) begin                                         //ADD
           rdata_o_next = $signed(in1_i) + $signed(in2_i);
         end else begin                                                            //SUB
@@ -221,7 +226,7 @@ input logic  clk;
       end else if(f3 == `FUNCT3_ARITH_AND) begin //111                            //AND
         rdata_o_next = in1_i & in2_i; //Bit-wise logcial AND
       end
-      raddr_o_next = {59'b0,dest_logic};
+      raddr_o_next = {59'b0,dest_reg};
       rdata_o_valid_next = all_valid;
       raddr_o_valid_next = all_valid;
       inst_o_valid_next = inst_i_valid;
@@ -230,7 +235,7 @@ input logic  clk;
       inst_o_next = inst_i;
       branch_pc_o_valid_next = 0;
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-    end else if(op == `OP_ARITH_I && all_valid) begin 
+    end else if(op == `OP_ARITH_I && all_valid && in1_i_valid) begin
       if(f3 == `FUNCT3_ARITH_I_ADDI) begin //000                                  //ADDI
         rdata_o_next = $signed({{52{arith_imm[11]}},arith_imm}) + $signed(in1_i);
       end else if(f3 == `FUNCT3_ARITH_I_SLTI) begin //010                         //SLTI
@@ -245,22 +250,22 @@ input logic  clk;
         end else begin
           rdata_o_next = 64'b0;
         end
-      end else if(f3 == `FUNCT3_ARITH_I_XORI) begin //100                         //XORI
+      end else if(f3 == `FUNCT3_ARITH_I_XORI) begin                                 //XORI
         rdata_o_next = {{52{arith_imm[11]}},arith_imm} ^ in1_i;
-      end else if(f3 == `FUNCT3_ARITH_I_ORI) begin //110                          //ORI
+      end else if(f3 == `FUNCT3_ARITH_I_ORI) begin                                  //ORI
         rdata_o_next = {{52{arith_imm[11]}},arith_imm} | in1_i;
-      end else if(f3 == `FUNCT3_ARITH_I_ANDI) begin //111                         //ANDI
+      end else if(f3 == `FUNCT3_ARITH_I_ANDI) begin                                //ANDI
         rdata_o_next = {{52{arith_imm[11]}},arith_imm} & in1_i;
-      end else if(f3 == `FUNCT3_ARITH_I_SLLI) begin //001 64 bit                  //SLLI
+      end else if(f3 == `FUNCT3_ARITH_I_SLLI) begin                               //SLLI
         rdata_o_next = in1_i << shamt; //shift left logical immediate
-      end else if(f3 == `FUNCT3_ARITH_I_SRLI) begin 
+      end else if(f3 == `FUNCT3_ARITH_I_SRLI) begin
         if(f7[5] == 1'b0) begin                                      //SRLI
           rdata_o_next = $signed(in1_i) >> shamt;//shift right logical immediate
         end else if (f7[5] == 1'b1) begin                            //SRAI
           rdata_o_next = $signed(in1_i) >>> shamt;
         end
       end
-      raddr_o_next = {59'b0,dest_logic};
+      raddr_o_next = {59'b0,dest_reg};
       rdata_o_valid_next = all_valid;
       raddr_o_valid_next = all_valid;
       inst_o_valid_next = inst_i_valid;
@@ -269,7 +274,7 @@ input logic  clk;
       inst_o_next = inst_i;
       branch_pc_o_valid_next = 0;
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-    end else if(op == `OP_STORE && all_valid) begin 
+    end else if(op == `OP_STORE && all_valid && in1_i_valid && in2_i_valid) begin
       if(f3 == `FUNCT3_STORE_SB) begin //Store bottom 8 bits                       //SB
         rdata_o_next = {{56{in2_i[7]}},in2_i[7:0]};
       end else if(f3 == `FUNCT3_STORE_SH) begin //Store bottom 16 bits            //SH
@@ -288,12 +293,12 @@ input logic  clk;
       inst_o_next = inst_i;
       branch_pc_o_valid_next = 0;
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-    end else if(op == `OP_LOAD && all_valid) begin
+    end else if(op == `OP_LOAD && all_valid && in1_i_valid) begin
       if(f3 == `FUNCT3_LOAD_LB || f3 == `FUNCT3_LOAD_LH || f3 == `FUNCT3_LOAD_LW || //LB,LH,LW,LD
          f3 == `FUNCT3_LOAD_LD || f3 == `FUNCT3_LOAD_LBU || f3 == `FUNCT3_LOAD_LHU || //LBU,LHU,LWU
          f3 == `FUNCT3_LOAD_LWU) begin
         rdata_o_next = $signed(in1_i) + $signed({{52{load_offset[11]}},load_offset});
-        raddr_o_next = {59'b0, dest_logic};
+        raddr_o_next = {59'b0, dest_reg};
       end
       rdata_o_valid_next = all_valid;
       raddr_o_valid_next = all_valid;
@@ -303,7 +308,7 @@ input logic  clk;
       inst_o_next = inst_i;
       branch_pc_o_valid_next = 0;
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-    end else if(op == `OP_BRANCH && all_valid) begin
+    end else if(op == `OP_BRANCH && all_valid && in1_i_valid && in2_i_valid) begin
       if(f3 == `FUNCT3_BRANCH_BEQ) begin                                            //BEQ
         if($signed(in1_i) == $signed(in2_i)) begin //BRANCH equal
           branch_pc_o_next = $signed(pc_i) + $signed({{51{br_offset[12]}},br_offset});
@@ -349,8 +354,8 @@ input logic  clk;
       rdata_o_valid_next = 0;
       raddr_o_valid_next = 0;
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-    end else if((op == `OP_JALR || op == `OP_JAL) && all_valid) begin 
-      if(op == `OP_JALR) begin                                                      //JALR
+    end else if((op == `OP_JALR || op == `OP_JAL) && all_valid) begin
+      if(op == `OP_JALR && in1_i_valid) begin                                                      //JALR
         branch_pc_o_next = ($signed(in1_i) + {{52{jmpR_offset[11]}},jmpR_offset}) & 64'hfffffffffffffffe;
         branch_pc_o_valid_next = all_valid;
       end else begin                                                                //JAL
@@ -358,7 +363,7 @@ input logic  clk;
         branch_pc_o_valid_next = 0;
       end
       rdata_o_next = $signed(pc_i) + 4;
-      raddr_o_next = {59'b0,dest_logic};
+      raddr_o_next = {59'b0,dest_reg};
       rdata_o_valid_next = all_valid;
       raddr_o_valid_next = all_valid;
       inst_o_valid_next = inst_i_valid;
@@ -372,7 +377,7 @@ input logic  clk;
       end else begin                                                                //LUI
         rdata_o_next = {{32{upper_imm[19]}},upper_imm,12'b0};
       end
-      raddr_o_next = {59'b0,dest_logic};
+      raddr_o_next = {59'b0,dest_reg};
       rdata_o_valid_next = all_valid;
       raddr_o_valid_next = all_valid;
       inst_o_valid_next = inst_i_valid;
@@ -381,7 +386,7 @@ input logic  clk;
       inst_o_next = inst_i;
       branch_pc_o_valid_next = 0;
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-    end else if(op == `OP_64ARITH_I && all_valid) begin
+    end else if(op == `OP_64ARITH_I && all_valid && in1_i_valid) begin
       if(f3 == `FUNCT3_64ARITH_I_ADDIW) begin                                                     //ADDIW
         rdata_o_next = $signed({{52{arith_imm[11]}},arith_imm}) + $signed({{32{in1_i[31]}},in1_i[31:0]});
       end else if(f3 == `FUNCT3_64ARITH_I_SLLIW) begin                                            //SLLIW
@@ -396,7 +401,7 @@ input logic  clk;
           rdata_o_next = {{32{help[31]}}, help};
         end
       end
-      raddr_o_next = {59'b0,dest_logic};
+      raddr_o_next = {59'b0,dest_reg};
       rdata_o_valid_next = all_valid;
       raddr_o_valid_next = all_valid;
       inst_o_valid_next = inst_i_valid;
@@ -405,7 +410,7 @@ input logic  clk;
       inst_o_next = inst_i;
       branch_pc_o_valid_next = 0;
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-    end else if(op == `OP_64ARITH && all_valid) begin
+    end else if(op == `OP_64ARITH && all_valid && in1_i_valid) begin
       if(f3 == `FUNCT3_64ARITH_ADDW || f3 == `FUNCT3_64ARITH_SUBW) begin
         if(f7 == `FUNCT7_64ARITH_ADDW) begin                                                      //ADDW
           help = $signed(in1_i[31:0]) + $signed(in2_i[31:0]);
@@ -426,7 +431,7 @@ input logic  clk;
           rdata_o_next = {{32{help[31]}},help};
         end
       end
-      raddr_o_next = {59'b0,dest_logic};
+      raddr_o_next = {59'b0,dest_reg};
       rdata_o_valid_next = all_valid;
       raddr_o_valid_next = all_valid;
       inst_o_valid_next = inst_i_valid;

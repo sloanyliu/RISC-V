@@ -56,8 +56,8 @@ module pyrm_write_back_block(
   input [64-1:0] rdata_pyri;
   input rdata_valid_pyri; //CONTROLLING VALID>>>>
   output rdata_retry_pyro; //ASEERT
-
-  input [32-1:0] inst_pyri; //no inst_pyro!
+  /* verilator lint_off UNUSED */
+  input [32-1:0] inst_pyri /* lint_on */; //no inst_pyro!
   input inst_valid_pyri; //CONTROLLING VALID>>>>
   output inst_retry_pyro; //ASSERT
 
@@ -124,6 +124,16 @@ module pyrm_write_back_block(
 
   write_back_block_dcache write_back_block_dcache_inst(.clk(clk), .dcaddr(dcaddr), .dcdata_in1(dcdata_in1), .dcdata_in2(dcdata_in2), .write(we), .dcdata_out1(dcdata_out1), .dcdata_out2(dcdata_out2));
 
+  always_comb begin
+    if(reset_pyri || pc_retry_pyri || branch_pc_retry_pyri || decode_reg_addr_retry_pyri || decode_reg_data_retry_pyri || debug_reg_addr_retry_pyri || debug_reg_data_retry_pyri) begin
+      pc_valid_pyro = 0;
+      branch_pc_valid_pyro = 0;
+      decode_reg_addr_valid_pyro = 0;
+      debug_reg_addr_valid_pyro = 0;
+      decode_reg_data_valid_pyro = 0;
+	    debug_reg_data_valid_pyro = 0;
+    end
+  end
 
   always_comb begin
     inst_retry_pyro = 0;
